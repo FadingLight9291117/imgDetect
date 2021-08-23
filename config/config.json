@@ -1,0 +1,9 @@
+{
+  "mae_mean": 0.011595866844640113,
+  "mae_std": 0.007344927705808639,
+  "mae_var": 5.394796300355536e-05,
+  "enable_adapt": true,
+  "K": 30,
+  "mae_thresh": 0.05,
+  "sub_method": "cv2.TM_SQDIFF_NORMED"
+}
