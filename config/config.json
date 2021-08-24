@@ -1,4 +1,7 @@
 {
+  "imgL_dir": "data/dataset/imgL",
+  "imgS_dir": "data/dataset/imgS",
+  "imgE_dir": "data/dataset/imgE",
   "mae_mean": 0.011595866844640113,
   "mae_std": 0.007344927705808639,
   "mae_var": 5.394796300355536e-05,

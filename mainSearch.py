@@ -10,7 +10,8 @@ from PIL import Image, ImageDraw
 from exceptions import RoiException, ImgException
 from utils import json2dict, Timer
 
-config = json2dict('config.json')
+
+config = json2dict('config/config.json')
 
 sub_method = eval(config['sub_method'])
 enable_adapt = config['enable_adapt']
@@ -22,7 +23,7 @@ mae_std = config['mae_std']
 
 def main_search(imgL: np.ndarray,
                 imgS: np.ndarray,
-                roi,
+                roi: List[float],
                 sub_method=sub_method,
                 enable_adapt=enable_adapt,
                 K=K,
@@ -45,15 +46,15 @@ def main_search(imgL: np.ndarray,
     2.1 roi越界；
 
     3. img转换
-    3.1 是否灰度
-    3.2 是否float
-    3.3 是否 / 255
+    3.1 灰度
+    3.2 np.float32
+    3.3 / 255
 
     4. match template
 
-    5. 计算box
+    5. 计算置信度
 
-    6. 计算置信度
+    6. 计算box
 
     7. return result
 
@@ -101,8 +102,8 @@ def main_search(imgL: np.ndarray,
     imgL_n = imgL[y1:y2, x1:x2]
 
     rate = adaptive_rate(imgS, enable_adapt, K)
-    imgL_n = _trans_img(imgL_n, rate)
-    imgS_n = _trans_img(imgS, rate)
+    imgL_n = trans_img(imgL_n, rate)
+    imgS_n = trans_img(imgS, rate)
 
     # 4. match template
     coeff = cv2.matchTemplate(imgL_n, imgS_n, sub_method)
@@ -112,13 +113,13 @@ def main_search(imgL: np.ndarray,
     else:
         box_x1, box_y1 = max_loc
 
-    # 6. 计算置信度
+    # 5. 计算置信度
     conf = compute_conf(imgL_n[box_y1:box_y1 + imgS_n.shape[0], box_x1:box_x1 + imgS_n.shape[1]],
                         imgS_n, mae_mean, mae_std)
 
-    # 5. 计算box
-    box_x1 = _inv_trans(box_x1, rate)
-    box_y1 = _inv_trans(box_y1, rate)
+    # 6. 计算box
+    box_x1 = inv_trans(box_x1, rate)
+    box_y1 = inv_trans(box_y1, rate)
     box_x1 += x1
     box_y1 += y1
     box_x2 = box_x1 + w_s
@@ -139,7 +140,7 @@ def main_search(imgL: np.ndarray,
     return res
 
 
-def _inv_trans(a, rate):
+def inv_trans(a, rate):
     a = int(a * rate)
     return a
 
@@ -150,14 +151,11 @@ def adaptive_rate(imgS, b_rate, K=50):
         h, w = imgS.shape[:2]
         rate = np.min([h / K, w / K])
         rate = np.max([rate, 1])
-        # rate = int(rate + 0.5)
-        # rate = bound(rate, 3, 4)
-        # a = int(np.log2(rate))
-        # rate = np.power(2, a + 1)
+
     return rate
 
 
-def _trans_img(img, rate):
+def trans_img(img, rate):
     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     img = img.astype(np.float32)
     img /= 255
@@ -166,7 +164,6 @@ def _trans_img(img, rate):
         h, w = img.shape[:2]
         img = cv2.resize(
             img, (int(w // rate), int(h // rate)), cv2.INTER_LINEAR)
-        # show_img(img)
     return img
 
 
@@ -174,7 +171,7 @@ def compute_conf(img1, img2, mae_mean, mae_std):
     h1, w1 = img1.shape[:2]
     h2, w2 = img2.shape[:2]
 
-    if h1 != h2 or w2 != w2:
+    if h1 != h2 or w1 != w2:
         conf = 0
         mae = 1
     else:
@@ -214,11 +211,11 @@ def show_res(imgL, roi, res_box, gt_box, save=False):
     im = Image.fromarray(imgL)
     imd = ImageDraw.ImageDraw(im)
     imd.rectangle(roi, outline=(255, 0, 0), width=1)
-    imd.text(roi[2:], text='roi')
+    imd.text(roi[:2], text='roi', fill=(255, 0, 0))
     imd.rectangle(gt_box, outline=(0, 255, 0), width=1)
-    imd.text(gt_box[2:], text='gt_box')
+    imd.text(gt_box[:2], text='gt_box', fill=(0, 255, 0))
     imd.rectangle(res_box, outline=(0, 0, 255), width=1)
-    imd.text(res_box[2:], text='res_box')
+    imd.text(res_box[:2], text='res_box', fill=(0, 0, 255))
     if save:
         im.save(save)
     else:
@@ -227,22 +224,38 @@ def show_res(imgL, roi, res_box, gt_box, save=False):
 
 if __name__ == '__main__':
     from data.dataset import Dataset
+    import logging
+    from utils import Timer
 
-    dataset = Dataset.init_dir('../data/face')
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
 
-    data = dataset[0]
-    another_data = dataset[1]
+    config = json2dict('config/config.json')
+    imgL_dir = Path(config['imgL_dir'])
+    imgS_dir = Path(config['imgS_dir'])
+    imgE_dir = Path(config['imgE_dir'])
 
-    data.load(trans=False, compress=False)
-    another_data.load(trans=False, compress=False)
+    save_path = Path('result/face')
+    save_path.mkdir(parents=True, exist_ok=True)
 
-    box = data.box.copy()
-    box[0] -= 50
-    box[1] -= 100
-    box[2] += 50
-    box[3] += 50
-    # box = [0, 0, data.imgL.shape[1], data.imgL.shape[0]]
-    res = main_search(data.imgL, another_data.imgS, box)
-    res['dist'] = box_dist(res['box'], data.box)
-    print(res)
-    show_res(data.imgL, roi=box, res_box=res['box'], gt_box=data.box)
+    imgL_paths = imgL_dir.glob('*.jpg')
+    imgS_paths = imgS_dir.glob('*.jpg')
+    imgE_paths = imgE_dir.glob('*.jpg')
+    label_path = imgS_dir / 'label.json'
+
+    # 这里要排下序
+
+    timer = Timer()
+    with timer:
+        boxes = json2dict(label_path)['boxes']
+        for i, (imgL_path, imgS_path) in enumerate(zip(imgL_paths, imgS_paths)):
+            # 读图
+            imgL = cv2.imread(imgL_path.as_posix())
+            imgS = cv2.imread(imgS_path.as_posix())
+            h, w = imgL.shape[:2]
+            res = main_search(imgL, imgS, [0, 0, w, h])
+
+            res['dist'] = box_dist(res['box'], boxes[i])
+            logger.debug(res)
+            show_res(imgL, [0, 0, w, h], res['box'], boxes[i])
+    logger.debug(f'run average time {timer.average_time() * 100:.0f}ms')

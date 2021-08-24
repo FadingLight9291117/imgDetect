@@ -17,16 +17,10 @@ def json2dict(json_path):
     return d
 
 
-"""
-一个计时器工具
-可以作为装饰器，也可以作为上下文管理器使用
-"""
-
-logger = logging.getLogger(__name__)
-
-
 class Timer:
     """
+    一个计时器工具
+    可以作为装饰器，也可以作为上下文管理器使用
     使用方法
     ```python
     timer = Timer()

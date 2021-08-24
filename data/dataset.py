@@ -11,12 +11,9 @@ import cv2
 
 __all__ = ['Dataset']
 
-from utils import Timer, Number
+from utils import Timer
 
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-
-tmp_number = Number()
 
 
 @dataclass
